@@ -15,13 +15,12 @@ phases:
       - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:-build-$(date +%Y%m%d%H%M%S)}
   build:
     commands:
-      - echo "Build da imagem do componente ${COMPONENT}"
-      - cd ${COMPONENT}
+      - echo "Construindo imagem a partir do diretório raiz"
       - |
         if [ -f Dockerfile ]; then
           docker build -t ${REPOSITORY_URI}:${IMAGE_TAG} .
         else
-          echo "Dockerfile não encontrado em ${COMPONENT}"; exit 1
+          echo "Dockerfile não encontrado na raiz"; exit 1
         fi
   post_build:
     commands:
