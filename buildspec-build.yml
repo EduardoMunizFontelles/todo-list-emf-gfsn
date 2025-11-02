@@ -13,26 +13,43 @@ phases:
       - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
       - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
       - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:-build-$(date +%Y%m%d%H%M%S)}
+
   build:
     commands:
-      - echo "Construindo imagem a partir do diretório raiz"
+      - echo "Construindo imagem Docker a partir do diretório raiz"
       - |
         if [ -f Dockerfile ]; then
           docker build -t ${REPOSITORY_URI}:${IMAGE_TAG} .
         else
-          echo "Dockerfile não encontrado na raiz"; exit 1
+          echo "❌ Dockerfile não encontrado na raiz do projeto"; exit 1
         fi
+
   post_build:
     commands:
-      - echo "Push para ECR"
+      - echo "Push da imagem para o Amazon ECR"
       - docker push ${REPOSITORY_URI}:${IMAGE_TAG}
       - docker tag ${REPOSITORY_URI}:${IMAGE_TAG} ${REPOSITORY_URI}:latest
       - docker push ${REPOSITORY_URI}:latest
-      - cd ..
+
+      # Geração dos manifests Kubernetes
+      - echo "Gerando manifestos Kubernetes com a imagem ${REPOSITORY_URI}:${IMAGE_TAG}"
       - mkdir -p dist/k8s
-      - sed "s|IMAGE_URI_PLACEHOLDER|${REPOSITORY_URI}:${IMAGE_TAG}|g" k8s/deployment.yaml > dist/k8s/deployment.yaml
-      - cp k8s/service.yaml dist/k8s/service.yaml
+      - |
+        if [ -f k8s/deployment.yaml ]; then
+          sed "s|IMAGE_URI_PLACEHOLDER|${REPOSITORY_URI}:${IMAGE_TAG}|g" k8s/deployment.yaml > dist/k8s/deployment.yaml
+        else
+          echo "❌ Arquivo k8s/deployment.yaml não encontrado"; exit 1
+        fi
+      - |
+        if [ -f k8s/service.yaml ]; then
+          cp k8s/service.yaml dist/k8s/service.yaml
+        else
+          echo "⚠️ Aviso: arquivo k8s/service.yaml não encontrado, continuando mesmo assim"
+        fi
+
+      # Metadados para o próximo estágio (deploy)
       - printf '{"repositoryUri":"%s","imageTag":"%s"}' "${REPOSITORY_URI}" "${IMAGE_TAG}" > dist/imageDetail.json
+      - echo "✅ Build finalizado com sucesso"
 
 artifacts:
   files:
